@@ -13,6 +13,7 @@ public sealed class MainForm : Form
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int VK_TAB = 0x09;
+    private const int HintResetButtonSpacing = 12;
 
     private readonly Label _statusLabel;
     private readonly Label _distanceLabel;
@@ -86,7 +87,7 @@ public sealed class MainForm : Form
             Left = 390,
             Top = 172
         };
-        hint.MaximumSize = new Size(_resetButton.Left - hint.Left - 12, 0);
+        hint.MaximumSize = new Size(_resetButton.Left - hint.Left - HintResetButtonSpacing, 0);
         _resetButton.Click += (_, _) => ResetCounters();
 
         Controls.Add(title);
