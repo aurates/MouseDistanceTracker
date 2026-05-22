@@ -13,15 +13,22 @@ public sealed class MainForm : Form
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int VK_TAB = 0x09;
+    private const ushort MOUSE_MOVE_ABSOLUTE = 0x0001;
 
     private readonly Label _statusLabel;
     private readonly Label _distanceLabel;
-    private readonly Label _deltaLabel;
+    private readonly Label _axisLabel;
+    private readonly Label _eventsLabel;
+    private readonly Label _lastDeltaLabel;
+    private readonly Label _hintLabel;
     private readonly Button _resetButton;
 
     private bool _tracking;
-    private long _rawX;
-    private long _rawY;
+    private long _totalAbsX;
+    private long _totalAbsY;
+    private long _eventCount;
+    private int _lastDx;
+    private int _lastDy;
     private double _totalDistance;
     private IntPtr _keyboardHook = IntPtr.Zero;
     private LowLevelKeyboardProc? _keyboardProc;
@@ -29,71 +36,103 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Mouse Distance Tracker";
-        Width = 520;
-        Height = 260;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        Width = 620;
+        Height = 360;
+        MinimumSize = new Size(620, 360);
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 8,
+            Padding = new Padding(24),
+            AutoSize = false
+        };
+
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
 
         var title = new Label
         {
             Text = "Mouse Distance Tracker",
             Font = new Font(Font.FontFamily, 16, FontStyle.Bold),
-            AutoSize = true,
-            Left = 24,
-            Top = 22
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
         _statusLabel = new Label
         {
-            Text = "Status: stopped — press Tab to start",
-            AutoSize = true,
-            Left = 24,
-            Top = 70
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
         _distanceLabel = new Label
         {
-            Text = "Total distance: 0 raw counts",
             Font = new Font(Font.FontFamily, 12, FontStyle.Regular),
-            AutoSize = true,
-            Left = 24,
-            Top = 105
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
-        _deltaLabel = new Label
+        _axisLabel = new Label
         {
-            Text = "Net movement: X = 0, Y = 0",
-            AutoSize = true,
-            Left = 24,
-            Top = 140
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
-        var hint = new Label
+        _eventsLabel = new Label
         {
-            Text = "Tab toggles tracking while this app is running. Distance is based on raw mouse input deltas.",
-            AutoSize = true,
-            Left = 24,
-            Top = 172
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        _lastDeltaLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        _hintLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.TopLeft,
+            MaximumSize = new Size(540, 0)
+        };
+
+        var bottomPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
         };
 
         _resetButton = new Button
         {
             Text = "Reset",
-            Width = 90,
+            Width = 96,
             Height = 32,
-            Left = 390,
-            Top = 172
+            TabStop = false
         };
         _resetButton.Click += (_, _) => ResetCounters();
+        bottomPanel.Controls.Add(_resetButton);
 
-        Controls.Add(title);
-        Controls.Add(_statusLabel);
-        Controls.Add(_distanceLabel);
-        Controls.Add(_deltaLabel);
-        Controls.Add(hint);
-        Controls.Add(_resetButton);
+        root.Controls.Add(title, 0, 0);
+        root.Controls.Add(_statusLabel, 0, 1);
+        root.Controls.Add(_distanceLabel, 0, 2);
+        root.Controls.Add(_axisLabel, 0, 3);
+        root.Controls.Add(_eventsLabel, 0, 4);
+        root.Controls.Add(_lastDeltaLabel, 0, 5);
+        root.Controls.Add(_hintLabel, 0, 6);
+        root.Controls.Add(bottomPanel, 0, 7);
+        Controls.Add(root);
     }
 
     protected override void OnLoad(EventArgs e)
@@ -133,8 +172,11 @@ public sealed class MainForm : Form
 
     private void ResetCounters()
     {
-        _rawX = 0;
-        _rawY = 0;
+        _totalAbsX = 0;
+        _totalAbsY = 0;
+        _eventCount = 0;
+        _lastDx = 0;
+        _lastDy = 0;
         _totalDistance = 0;
         UpdateLabels();
     }
@@ -142,11 +184,14 @@ public sealed class MainForm : Form
     private void UpdateLabels()
     {
         _statusLabel.Text = _tracking
-            ? "Status: tracking — press Tab to stop"
+            ? "Status: tracking raw mouse input — press Tab to stop"
             : "Status: stopped — press Tab to start";
 
-        _distanceLabel.Text = $"Total distance: {_totalDistance:N2} raw counts";
-        _deltaLabel.Text = $"Net movement: X = {_rawX:N0}, Y = {_rawY:N0}";
+        _distanceLabel.Text = $"Total path distance: {_totalDistance:N2} raw counts";
+        _axisLabel.Text = $"Total axis movement: X = {_totalAbsX:N0} raw counts, Y = {_totalAbsY:N0} raw counts";
+        _eventsLabel.Text = $"Raw input events counted: {_eventCount:N0}";
+        _lastDeltaLabel.Text = $"Last raw delta: dx = {_lastDx:N0}, dy = {_lastDy:N0}";
+        _hintLabel.Text = "Distance is based on WM_INPUT / Raw Input mouse deltas. It does not use cursor position, screen pixels, or Windows pointer acceleration. The X/Y totals are absolute movement counters, so they never go negative.";
     }
 
     private void HandleRawInput(IntPtr hRawInput)
@@ -173,6 +218,13 @@ public sealed class MainForm : Form
                 return;
             }
 
+            // This tracker is intended for normal relative mouse movement.
+            // Absolute devices use normalized coordinates, not movement counts, so ignore them here.
+            if ((raw.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) == MOUSE_MOVE_ABSOLUTE)
+            {
+                return;
+            }
+
             int dx = raw.mouse.lLastX;
             int dy = raw.mouse.lLastY;
 
@@ -181,9 +233,12 @@ public sealed class MainForm : Form
                 return;
             }
 
-            _rawX += dx;
-            _rawY += dy;
-            _totalDistance += Math.Sqrt((dx * dx) + (dy * dy));
+            _lastDx = dx;
+            _lastDy = dy;
+            _eventCount++;
+            _totalAbsX += Math.Abs((long)dx);
+            _totalAbsY += Math.Abs((long)dy);
+            _totalDistance += Math.Sqrt(((double)dx * dx) + ((double)dy * dy));
             UpdateLabels();
         }
         finally
