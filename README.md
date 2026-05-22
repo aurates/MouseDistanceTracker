@@ -13,7 +13,6 @@ A small Windows-only .NET 8 WinForms app for testing raw mouse movement.
   - Total absolute X movement in raw counts
   - Total absolute Y movement in raw counts
   - Number of raw input events counted
-  - Last raw delta
 
 ## Notes
 
