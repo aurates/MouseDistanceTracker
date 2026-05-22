@@ -86,6 +86,7 @@ public sealed class MainForm : Form
             Left = 390,
             Top = 172
         };
+        hint.MaximumSize = new Size(_resetButton.Left - hint.Left - 12, 0);
         _resetButton.Click += (_, _) => ResetCounters();
 
         Controls.Add(title);
