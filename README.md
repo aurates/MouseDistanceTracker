@@ -6,6 +6,7 @@ A small Windows-only .NET 8 WinForms app for testing raw mouse movement.
 
 - Press **Tab** to start tracking
 - Press **Tab** again to stop tracking
+- Press **Ctrl** to reset the counters
 - Reads mouse movement from **WM_INPUT / Raw Input**
 - Does not use cursor position or screen-pixel movement
 - Shows:
