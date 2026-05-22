@@ -13,6 +13,9 @@ public sealed class MainForm : Form
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int VK_TAB = 0x09;
+    private const int VK_CONTROL = 0x11;
+    private const int VK_LCONTROL = 0xA2;
+    private const int VK_RCONTROL = 0xA3;
     private const ushort MOUSE_MOVE_ABSOLUTE = 0x0001;
 
     private readonly Label _statusLabel;
@@ -89,7 +92,7 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.TopLeft,
             AutoEllipsis = false,
             Padding = new Padding(0, 8, 0, 0),
-            Text = "Distance is based on WM_INPUT / Raw Input mouse deltas. It does not use cursor position, screen pixels, or Windows pointer acceleration. X/Y totals are absolute movement counters, so they never go negative."
+            Text = "Distance is based on WM_INPUT / Raw Input mouse deltas. It does not use cursor position, screen pixels, or Windows pointer acceleration. Press Ctrl to reset the counters."
         };
 
         var bottomPanel = new FlowLayoutPanel
@@ -193,8 +196,8 @@ public sealed class MainForm : Form
         }
 
         _statusLabel.Text = _tracking
-            ? "Status: tracking raw mouse input — press Tab to stop"
-            : "Status: stopped — press Tab to start";
+            ? "Status: tracking raw mouse input — press Tab to stop, Ctrl to reset"
+            : "Status: stopped — press Tab to start, Ctrl to reset";
 
         _metricsBox.Text =
             $"Total path distance : {_totalDistance:N2} raw counts{Environment.NewLine}" +
@@ -305,6 +308,10 @@ public sealed class MainForm : Form
             if (keyInfo.vkCode == VK_TAB)
             {
                 BeginInvoke(ToggleTracking);
+            }
+            else if (keyInfo.vkCode == VK_CONTROL || keyInfo.vkCode == VK_LCONTROL || keyInfo.vkCode == VK_RCONTROL)
+            {
+                BeginInvoke(ResetCounters);
             }
         }
 
